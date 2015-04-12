@@ -66,18 +66,6 @@ enum {
 };
 
 enum {
-	MDSS_PANEL_POWER_OFF = 0,
-	MDSS_PANEL_POWER_ON,
-	MDSS_PANEL_POWER_DOZE,
-};
-
-enum {
-	MDSS_PANEL_BLANK_BLANK = 0,
-	MDSS_PANEL_BLANK_UNBLANK,
-	MDSS_PANEL_BLANK_LOW_POWER,
-};
-
-enum {
 	MODE_GPIO_NOT_VALID = 0,
 	MODE_GPIO_HIGH,
 	MODE_GPIO_LOW,
@@ -144,13 +132,13 @@ struct mdss_panel_recovery {
  * @MDSS_EVENT_PANEL_CLK_CTRL:	panel clock control
 				 - 0 clock disable
 				 - 1 clock enable
+ * @MDSS_EVENT_ENABLE_PARTIAL_UPDATE: Event to update ROI of the panel.
  * @MDSS_EVENT_DSI_CMDLIST_KOFF: acquire dsi_mdp_busy lock before kickoff.
- * @MDSS_EVENT_ENABLE_PARTIAL_ROI: Event to update ROI of the panel.
- * @MDSS_EVENT_DSI_STREAM_SIZE: Event to update DSI controller's stream size
- * @MDSS_EVENT_DSI_DYNAMIC_SWITCH: Event to update the dsi driver structures
- *				based on the dsi mode passed as argument.
- *				- 0: update to video mode
- *				- 1: update to command mode
+ * @MDSS_EVENT_DSI_ULPS_CTRL:	Event to configure Ultra Lower Power Saving
+ *				mode for the DSI data and clock lanes. The
+ *				event arguments can have one of these values:
+ *				- 0: Disable ULPS mode
+ *				- 1: Enable ULPS mode
  */
 enum mdss_intf_events {
 	MDSS_EVENT_RESET = 1,
@@ -168,10 +156,8 @@ enum mdss_intf_events {
 	MDSS_EVENT_FB_REGISTERED,
 	MDSS_EVENT_PANEL_CLK_CTRL,
 	MDSS_EVENT_DSI_CMDLIST_KOFF,
-	MDSS_EVENT_ENABLE_PARTIAL_ROI,
-	MDSS_EVENT_DSI_STREAM_SIZE,
-	MDSS_EVENT_DSI_DYNAMIC_SWITCH,
-	MDSS_EVENT_REGISTER_RECOVERY_HANDLER,
+	MDSS_EVENT_ENABLE_PARTIAL_UPDATE,
+	MDSS_EVENT_DSI_ULPS_CTRL,
 };
 
 struct lcd_panel_info {
@@ -242,9 +228,6 @@ struct mipi_panel_info {
 	char stream;	/* 0 or 1 */
 	char mdp_trigger;
 	char dma_trigger;
-	/*Dynamic Switch Support*/
-	bool dynamic_switch_enabled;
-	u32 pixel_packing;
 	u32 dsi_pclk_rate;
 	/* The packet-size should not bet changed */
 	char no_max_pkt_size;
@@ -332,7 +315,10 @@ struct mdss_panel_info {
 	u32 rst_seq[MDSS_DSI_RST_SEQ_LEN];
 	u32 rst_seq_len;
 	u32 vic; /* video identification code */
-	struct mdss_rect roi;
+	u32 roi_x;
+	u32 roi_y;
+	u32 roi_w;
+	u32 roi_h;
 	int bklt_ctrl;	/* backlight ctrl */
 	int pwm_pmic_gpio;
 	int pwm_lpg_chan;
@@ -353,17 +339,10 @@ struct mdss_panel_info {
 
 	u32 cont_splash_enabled;
 	u32 partial_update_enabled;
-	u32 partial_update_dcs_cmd_by_left;
-	u32 partial_update_roi_merge;
 	struct ion_handle *splash_ihdl;
-	int panel_power_state;
-	int blank_state;
+	u32 panel_power_on;
 
 	uint32_t panel_dead;
-	bool dynamic_switch_pending;
-	bool is_lpm_mode;
-	bool is_split_display;
-
 	struct mdss_mdp_pp_tear_check te;
 
 	struct lcd_panel_info lcdc;
@@ -373,17 +352,8 @@ struct mdss_panel_info {
 	struct edp_panel_info edp;
 
 #ifdef CONFIG_MACH_OPPO
-	int cabc_available;
-	int cabc_mode;
-
-	int gamma_index;
-	int gamma_count;
-
-	int sre_available;
-	bool sre_enabled;
-
-	bool color_enhance_available;
-	bool color_enhance_enabled;
+    int cabc_available;
+    int cabc_mode;
 #endif
 };
 
@@ -503,56 +473,6 @@ static inline int mdss_panel_get_htotal(struct mdss_panel_info *pinfo, bool
 
 int mdss_register_panel(struct platform_device *pdev,
 	struct mdss_panel_data *pdata);
-
-/*
- * mdss_panel_is_power_off: - checks if a panel is off
- * @panel_power_state: enum identifying the power state to be checked
- */
-static inline bool mdss_panel_is_power_off(int panel_power_state)
-{
-	return (panel_power_state == MDSS_PANEL_POWER_OFF);
-}
-
-/**
- * mdss_panel_is_power_on_interactive: - checks if a panel is on and interactive
- * @panel_power_state: enum identifying the power state to be checked
- *
- * This function returns true only is the panel is fully interactive and
- * opertaing in normal mode.
- */
-static inline bool mdss_panel_is_power_on_interactive(int panel_power_state)
-{
-	return (panel_power_state == MDSS_PANEL_POWER_ON);
-}
-
-/**
- * mdss_panel_is_panel_power_on: - checks if a panel is on
- * @panel_power_state: enum identifying the power state to be checked
- *
- * A panel is considered to be on as long as it can accept any commands
- * or data. Sometimes it is posible to program the panel to be in a low
- * power non-interactive state. This function returns false only if panel
- * has explicitly been turned off.
- */
-static inline bool mdss_panel_is_power_on(int panel_power_state)
-{
-	return !mdss_panel_is_power_off(panel_power_state);
-}
-
-/**
- * mdss_panel_is_panel_power_on_lp: - checks if a panel is in a low power mode
- * @pdata: pointer to the panel struct associated to the panel
- * @panel_power_state: enum identifying the power state to be checked
- *
- * This function returns true if the panel is in an intermediate low power
- * state where it is still on but not fully interactive. It may still accept
- * commands and display updates but would be operating in a low power mode.
- */
-static inline bool mdss_panel_is_power_on_lp(int panel_power_state)
-{
-	return !mdss_panel_is_power_off(panel_power_state) &&
-		!mdss_panel_is_power_on_interactive(panel_power_state);
-}
 
 /**
  * mdss_panel_intf_type: - checks if a given intf type is primary

@@ -47,11 +47,8 @@
  *
  * @MDP_NOTIFY_FRAME_BEGIN:	Frame update has started, the frame is about to
  *				be programmed into hardware.
- * @MDP_NOTIFY_FRAME_CFG_DONE:	Frame configuration is done.
- * @MDP_NOTIFY_FRAME_CTX_DONE:	Frame has finished accessing sw context.
- *				Next frame can start preparing.
  * @MDP_NOTIFY_FRAME_READY:	Frame ready to be kicked off, this can be used
- *				as the last point in time to synchronize with
+ *				as the last point in time to synchronized with
  *				source buffers before kickoff.
  * @MDP_NOTIFY_FRAME_FLUSHED:	Configuration of frame has been flushed and
  *				DMA transfer has started.
@@ -65,17 +62,16 @@
  */
 enum mdp_notify_event {
 	MDP_NOTIFY_FRAME_BEGIN = 1,
-	MDP_NOTIFY_FRAME_CFG_DONE,
-	MDP_NOTIFY_FRAME_CTX_DONE,
 	MDP_NOTIFY_FRAME_READY,
 	MDP_NOTIFY_FRAME_FLUSHED,
 	MDP_NOTIFY_FRAME_DONE,
 	MDP_NOTIFY_FRAME_TIMEOUT,
+	MDP_NOTIFY_FRAME_START,
 };
 
 struct disp_info_type_suspend {
 	int op_enable;
-	int panel_power_state;
+	int panel_power_on;
 };
 
 struct disp_info_notify {
@@ -92,8 +88,6 @@ struct msm_sync_pt_data {
 	char *fence_name;
 	u32 acq_fen_cnt;
 	struct sync_fence *acq_fen[MDP_MAX_FENCE_FD];
-	u32 temp_fen_cnt;
-	struct sync_fence *temp_fen[MDP_MAX_FENCE_FD];
 
 	struct sw_sync_timeline *timeline;
 	int timeline_value;
@@ -119,8 +113,7 @@ struct msm_mdp_interface {
 	int (*on_fnc)(struct msm_fb_data_type *mfd);
 	int (*off_fnc)(struct msm_fb_data_type *mfd);
 	/* called to release resources associated to the process */
-	int (*release_fnc)(struct msm_fb_data_type *mfd, bool release_all,
-				uint32_t pid);
+	int (*release_fnc)(struct msm_fb_data_type *mfd, bool release_all);
 	int (*kickoff_fnc)(struct msm_fb_data_type *mfd,
 					struct mdp_display_commit *data);
 	int (*ioctl_handler)(struct msm_fb_data_type *mfd, u32 cmd, void *arg);
@@ -131,15 +124,12 @@ struct msm_mdp_interface {
 	int (*do_histogram)(struct msm_fb_data_type *mfd,
 				struct mdp_histogram *hist);
 	int (*update_ad_input)(struct msm_fb_data_type *mfd);
-	int (*ad_attenuate_bl)(u32 bl, u32 *bl_out,
-			struct msm_fb_data_type *mfd);
 	int (*panel_register_done)(struct mdss_panel_data *pdata);
 	u32 (*fb_stride)(u32 fb_index, u32 xres, int bpp);
 	int (*splash_init_fnc)(struct msm_fb_data_type *mfd);
 	struct msm_sync_pt_data *(*get_sync_fnc)(struct msm_fb_data_type *mfd,
 				const struct mdp_buf_sync *buf_sync);
 	void (*check_dsi_status)(struct work_struct *work, uint32_t interval);
-	int (*configure_panel)(struct msm_fb_data_type *mfd, int mode);
 	void *private1;
 };
 
@@ -189,14 +179,14 @@ struct msm_fb_data_type {
 	int panel_reconfig;
 
 	u32 dst_format;
-	int panel_power_state;
+	int panel_power_on;
 	struct disp_info_type_suspend suspend;
 
 	struct ion_handle *ihdl;
-	dma_addr_t iova;
+	unsigned long iova;
 	void *cursor_buf;
-	phys_addr_t cursor_buf_phys;
-	dma_addr_t cursor_buf_iova;
+	unsigned long cursor_buf_phys;
+	unsigned long cursor_buf_iova;
 
 	int ext_ad_ctrl;
 	u32 ext_bl_ctrl;
@@ -245,9 +235,6 @@ struct msm_fb_data_type {
 
 	struct ion_client *fb_ion_client;
 	struct ion_handle *fb_ion_handle;
-	struct dma_buf *fbmem_buf;
-
-	bool mdss_fb_split_stored;
 
 	u32 wait_for_kickoff;
 };
@@ -271,28 +258,7 @@ static inline void mdss_fb_update_notify_update(struct msm_fb_data_type *mfd)
 	}
 }
 
-static inline bool mdss_fb_is_power_off(struct msm_fb_data_type *mfd)
-{
-	return mdss_panel_is_power_off(mfd->panel_power_state);
-}
-
-static inline bool mdss_fb_is_power_on_interactive(
-	struct msm_fb_data_type *mfd)
-{
-	return mdss_panel_is_power_on_interactive(mfd->panel_power_state);
-}
-
-static inline bool mdss_fb_is_power_on(struct msm_fb_data_type *mfd)
-{
-	return mdss_panel_is_power_on(mfd->panel_power_state);
-}
-
-static inline bool mdss_fb_is_power_on_lp(struct msm_fb_data_type *mfd)
-{
-	return mdss_panel_is_power_on_lp(mfd->panel_power_state);
-}
-
-int mdss_fb_get_phys_info(dma_addr_t *start, unsigned long *len, int fb_num);
+int mdss_fb_get_phys_info(unsigned long *start, unsigned long *len, int fb_num);
 void mdss_fb_set_backlight(struct msm_fb_data_type *mfd, u32 bkl_lvl);
 void mdss_fb_update_backlight(struct msm_fb_data_type *mfd);
 int mdss_fb_wait_for_fence(struct msm_sync_pt_data *sync_pt_data);

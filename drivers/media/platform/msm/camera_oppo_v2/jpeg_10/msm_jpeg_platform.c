@@ -52,15 +52,14 @@ void msm_jpeg_platform_p2v(struct msm_jpeg_device *pgmn_dev, struct file  *file,
 uint32_t msm_jpeg_platform_v2p(struct msm_jpeg_device *pgmn_dev, int fd,
 	uint32_t len, struct file **file_p, struct ion_handle **ionhandle,
 	int domain_num) {
-	dma_addr_t paddr;
-	unsigned long size;
+	unsigned long paddr, size;
 	int rc;
 	*ionhandle = ion_import_dma_buf(pgmn_dev->jpeg_client, fd);
 	if (IS_ERR_OR_NULL(*ionhandle))
 		return 0;
 
 	rc = ion_map_iommu(pgmn_dev->jpeg_client, *ionhandle, domain_num, 0,
-		SZ_4K, 0, &paddr, (unsigned long *)&size, 0, 0);
+		SZ_4K, 0, &paddr, &size, 0, 0);
 	JPEG_DBG("%s:%d] addr 0x%x size %ld", __func__, __LINE__,
 		(uint32_t)paddr, size);
 

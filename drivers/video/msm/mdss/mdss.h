@@ -66,11 +66,6 @@ struct mdss_debug_inf {
 	void (*debug_enable_clock)(int on);
 };
 
-struct mdss_perf_tune {
-	unsigned long min_mdp_clk;
-	u64 min_bus_vote;
-};
-
 #define MDSS_IRQ_SUSPEND	-1
 #define MDSS_IRQ_RESUME		1
 #define MDSS_IRQ_REQ		0
@@ -133,7 +128,6 @@ struct mdss_data_type {
 	u8 has_wfd_blk;
 	u32 has_no_lut_read;
 	u8 has_wb_ad;
-	bool idle_pc_enabled;
 
 	u32 rotator_ot_limit;
 	u32 mdp_irq_mask;
@@ -143,6 +137,7 @@ struct mdss_data_type {
 	u8 clk_ena;
 	u8 fs_ena;
 	u8 vsync_ena;
+	unsigned long min_mdp_clk;
 
 	u32 res_init;
 
@@ -171,9 +166,6 @@ struct mdss_data_type {
 	u32 *clock_levels;
 	u32 nclk_lvl;
 
-	u32 enable_bw_release;
-	u32 enable_rotator_bw_release;
-
 	struct mdss_hw_settings *hw_settings;
 
 	struct mdss_mdp_pipe *vig_pipes;
@@ -189,16 +181,12 @@ struct mdss_data_type {
 	struct mdss_mdp_mixer *mixer_wb;
 	u32 nmixers_intf;
 	u32 nmixers_wb;
-
 	struct mdss_mdp_ctl *ctl_off;
 	u32 nctl;
-
 	struct mdss_mdp_dp_intf *dp_off;
 	u32 ndp;
 	void *video_intf;
 	u32 nintf;
-
-	int pp_enable;
 
 	struct mdss_mdp_ad *ad_off;
 	struct mdss_ad_info *ad_cfgs;
@@ -219,9 +207,7 @@ struct mdss_data_type {
 
 	int handoff_pending;
 	struct mdss_prefill_data prefill_data;
-	bool idle_pc;
-	struct mdss_perf_tune perf_tune;
-	atomic_t active_intf_cnt;
+	bool ulps;
 	int iommu_ref_cnt;
 
 	u64 ab[MDSS_MAX_HW_BLK];

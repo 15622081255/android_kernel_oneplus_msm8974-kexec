@@ -60,9 +60,6 @@ struct mdss_mdp_writeback_ctx {
 
 	spinlock_t wb_lock;
 	struct list_head vsync_handlers;
-
-	ktime_t start_time;
-	ktime_t end_time;
 };
 
 static struct mdss_mdp_writeback_ctx wb_ctx_list[MDSS_MDP_MAX_WRITEBACK] = {
@@ -114,7 +111,7 @@ static int mdss_mdp_writeback_addr_setup(struct mdss_mdp_writeback_ctx *ctx,
 		return -EINVAL;
 	data = *in_data;
 
-	pr_debug("wb_num=%d addr=0x%pa\n", ctx->wb_num, &data.p[0].addr);
+	pr_debug("wb_num=%d addr=0x%x\n", ctx->wb_num, data.p[0].addr);
 
 	if (ctx->bwc_mode)
 		data.bwc_enabled = 1;
@@ -388,8 +385,7 @@ exit:
 	return ret;
 }
 
-static int mdss_mdp_writeback_stop(struct mdss_mdp_ctl *ctl,
-	int panel_power_state)
+static int mdss_mdp_writeback_stop(struct mdss_mdp_ctl *ctl)
 {
 	struct mdss_mdp_writeback_ctx *ctx;
 	struct mdss_mdp_vsync_handler *t, *handle;
@@ -443,7 +439,6 @@ static int mdss_mdp_wb_wait4comp(struct mdss_mdp_ctl *ctl, void *arg)
 {
 	struct mdss_mdp_writeback_ctx *ctx;
 	int rc = 0;
-	u64 rot_time;
 
 	ctx = (struct mdss_mdp_writeback_ctx *) ctl->priv_data;
 	if (!ctx) {
@@ -465,27 +460,17 @@ static int mdss_mdp_wb_wait4comp(struct mdss_mdp_ctl *ctl, void *arg)
 		WARN(1, "writeback kickoff timed out (%d) ctl=%d\n",
 						rc, ctl->num);
 	} else {
-		ctx->end_time = ktime_get();
 		mdss_mdp_ctl_notify(ctl, MDP_NOTIFY_FRAME_DONE);
 		rc = 0;
 	}
 
 	mdss_iommu_ctrl(0);
-	mdss_bus_bandwidth_ctrl(false);
 	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF, false); /* clock off */
 
 	/* Set flag to release Controller Bandwidth */
 	ctl->perf_release_ctl_bw = true;
 
 	ctx->comp_cnt--;
-
-	if (!rc) {
-		rot_time = (u64)ktime_to_us(ctx->end_time) -
-				(u64)ktime_to_us(ctx->start_time);
-		pr_debug("ctx%d type:%d xin_id:%d intf_num:%d took %llu microsecs\n",
-			ctx->wb_num, ctx->type, ctx->xin_id,
-				ctx->intf_num, rot_time);
-	}
 
 	return rc;
 }
@@ -553,13 +538,8 @@ static int mdss_mdp_writeback_display(struct mdss_mdp_ctl *ctl, void *arg)
 		return ret;
 	}
 	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON, false);
-	mdss_bus_bandwidth_ctrl(true);
-	ctx->start_time = ktime_get();
 	mdss_mdp_ctl_write(ctl, MDSS_MDP_REG_CTL_START, 1);
 	wmb();
-
-	pr_debug("ctx%d type:%d xin_id:%d intf_num:%d start\n",
-		ctx->wb_num, ctx->type, ctx->xin_id, ctx->intf_num);
 
 	ctx->comp_cnt++;
 
@@ -622,5 +602,5 @@ int mdss_mdp_writeback_display_commit(struct mdss_mdp_ctl *ctl, void *arg)
 			ctl->mixer_right->params_changed++;
 	}
 
-	return mdss_mdp_display_commit(ctl, arg, NULL);
+	return mdss_mdp_display_commit(ctl, arg);
 }
